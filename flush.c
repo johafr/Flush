@@ -25,15 +25,26 @@ void printCurrentDirectory() {
 }
 
 void executeCommand(char input[10]) {
-  if (strcmp(input, "help") == 0) {
-    showCommands();
-  } else if (strcmp(input, "cd") == 0){
-    //
-  } else if (strcmp(input, "ls") == 0){
-    //TODO ls:
+  pid_t PID = fork();
+  int status;
+  if (PID != 0) {
+    //parent fork
+    waitpid(-1, &status, 0);
+
   } else {
-    printf("command not available. For information about available commands, type 'help'. \n");
+    //child fork
+    if (strcmp(input, "help") == 0) {
+      showCommands();
+    } else if (strcmp(input, "cd") == 0){
+      //TODO cd
+    } else if (strcmp(input, "ls") == 0){
+      //TODO ls:
+    } else {
+      printf("command not available. For information about available commands, type 'help'. \n");
+    }
+    exit(0); 
   }
+  printf("Exit status [%s] = %i\n", input, status);
 }
 
 int main() {
@@ -41,10 +52,11 @@ int main() {
 
   while (1) {
     printCurrentDirectory();
-    scanf("%s", input);
+    if (scanf("%s", input) == EOF) {
+      break;
+    }
     executeCommand(input);
   }
-
-  printf("Compiled\n");
+  printf("\nCompiled\n");
   return 0;
 }
