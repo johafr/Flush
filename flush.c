@@ -7,15 +7,34 @@
 #include<readline/readline.h>
 #include<readline/history.h>
 
-char history[10][100];
-char commands[][100] = {"help", "cd", "ls"};
+char commands[][100] = {"help", "cd", "ls", "user"};
 
+int ownCommands(char** parsedArgs);
+
+//method for "help".
 void showCommands() {
   printf("Available commands: \n");
   int len = sizeof(commands)/sizeof(commands[0]);
   for (int i = 0; i < len; i++) {
-    printf("%s\n", commands[i]);
+    printf("- %s\n", commands[i]);
   }
+}
+
+//method for "user".
+void printUser() {
+  printf("User: %s\n", getenv("USER"));
+}
+
+//method for "cd".
+void changeDirectory(char** parsedArgs) {
+  char* formatted;
+  if (parsedArgs[1][0] == '/') {
+    formatted = parsedArgs[1] + 1;
+  } else {
+    formatted = parsedArgs[1];
+  }
+  chdir(formatted);
+  printf("cd complete \n");
 }
 
 void printCurrentDirectory() {
@@ -24,39 +43,175 @@ void printCurrentDirectory() {
   printf("%s: ", cwd);
 }
 
-void executeCommand(char input[10]) {
-  pid_t PID = fork();
-  int status;
-  if (PID != 0) {
-    //parent fork
-    waitpid(-1, &status, 0);
-
-  } else {
-    //child fork
-    if (strcmp(input, "help") == 0) {
-      showCommands();
-    } else if (strcmp(input, "cd") == 0){
-      //TODO cd
-    } else if (strcmp(input, "ls") == 0){
-      //TODO ls:
-    } else {
-      printf("command not available. For information about available commands, type 'help'. \n");
-    }
-    exit(0); 
+int takeInput(char* input) {
+  char* buffer;
+  buffer = readline("\n>>>");
+  if (buffer == NULL) {
+    return -1;
   }
-  printf("Exit status [%s] = %i\n", input, status);
+  if (strlen(buffer) != 0) {
+    add_history(buffer);
+    strcpy(input, buffer);
+    free(buffer);
+    return 0;
+  } else {
+  return 1;
+  }
+} 
+
+int processString(char* str, char** parsedArgs) {
+  for (int i = 0; i < 100; i++) {
+    parsedArgs[i] = strsep(&str, " ");
+    if (parsedArgs[i] == NULL) {
+      break;
+    }
+    if (strlen(parsedArgs[i]) == 0) {
+      i--;
+    }
+  }
+  if (ownCommands(parsedArgs)) {
+    return 0;
+  } else {
+    return 1;
+  }
 }
 
+int ownCommands(char** parsedArgs) {
+  int num = 4;
+  int argNum;
+  char *inputFilename;
+  char *outputFilename;
+  
+  for (int i = 0; i < num; i++) {
+    if (strcmp(parsedArgs[0], commands[i]) == 0) {
+      argNum = i;
+      break;
+    }
+  } 
+  
+
+  switch(argNum) {
+    case 0:
+      showCommands();
+      return 1;
+    case 1:
+    changeDirectory(parsedArgs);
+      return 1;
+    case 2:
+      printf("ls \n");
+      return 1;
+    case 3:
+      printUser();
+      return 1;
+    default: 
+      break;
+  }
+  return 0;
+}
+
+int executeCommand(char** parsedArgs) {
+  int status;
+  pid_t PID = fork();
+  if (PID == 0) {
+    if (execvp(parsedArgs[0], parsedArgs) < 0) {
+      printf("Could not execute program. For information about available commands, type 'help'\n");
+    }
+    exit(0);
+  } else {
+    waitpid(-1, &status, 0);
+    return status;
+  }
+}
+
+int redirectInput(char** parsedArgs, char** inputFilename) {
+  for (int i = 0; parsedArgs[i] != NULL; i++) {
+    if (&parsedArgs[i][0] == "<") {
+      free(parsedArgs[i]);
+      if (parsedArgs[i+1] == NULL) {
+        return -1;
+      } 
+      *inputFilename = parsedArgs[i+1];
+      for (int j = i; parsedArgs[j-1] != NULL; j++) {
+        parsedArgs[j] = parsedArgs[j+2];
+      }
+      return 1;
+    }
+  }
+  return 0;
+}
+
+int redirectOutput(char** parsedArgs, char** outputFilename) {
+  for(int i = 0; parsedArgs[i] != NULL; i++) {
+    if(parsedArgs[i][0] == '>') {
+      free(parsedArgs[i]);
+      if(parsedArgs[i+1] != NULL) {
+	      *outputFilename = parsedArgs[i+1];
+      } else {
+        return -1;
+      }
+      for(int j = i; parsedArgs[j-1] != NULL; j++) {
+	      parsedArgs[j] = parsedArgs[j+2];
+      }
+      return 1;
+    }
+  }
+  return 0;
+}
+
+
+
 int main() {
-  char input[10];
+  char input[100], *parsedArgs[100];
+  int execFlag = 0;
+  int status;
 
   while (1) {
     printCurrentDirectory();
-    if (scanf("%s", input) == EOF) {
+    int inputValue = takeInput(input);
+
+    //I/O redirecting
+    char *inputFilename;
+    char *outputFilename;
+    int inputR = redirectInput(parsedArgs, &inputFilename);
+    switch(inputR) {
+    case -1:
+      printf("Not valid File. \n");
+      continue;
+      break;
+    case 0:
+      break;
+    case 1:
+      printf("Redirecting input from: %s\n", inputFilename);
       break;
     }
-    executeCommand(input);
+
+    int outputR = redirectOutput(parsedArgs, &outputFilename);
+    switch(outputR) {
+    case -1:
+      printf("Not valid File. \n");
+      continue;
+      break;
+    case 0:
+      break;
+    case 1:
+      printf("Redirecting output to: %s\n", outputFilename);
+      break;
+    }
+
+    if (inputValue == -1) {
+      break;
+    } else if (inputValue == 1) {
+      continue;
+    } else {
+      execFlag = processString(input, parsedArgs);
+      if (execFlag == 1) {
+        status = executeCommand(parsedArgs);
+      }
+      printf("Exit status [%s] = %i\n", parsedArgs[0], status);
+    }
   }
-  printf("\nCompiled\n");
+
+
+  printf("\nByeBye!\n");
   return 0;
 }

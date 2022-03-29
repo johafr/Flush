@@ -1,7 +1,8 @@
 # Flush
 Flush shell implementation
 
-Mulig vi må lære shellscripts 
-Usikker på om vi skal lage et shell eller et fiktivt et i terminalen
+TODO: 
+- Bug med exit status, returnerer ikke alltid 0
+- implementere separering med tab
 
-Må gjøres: Implementere ASCII tegn som input så man kan terminere.
+- I/O redirection fungerer ikke, må nesten spørre noen hva det er...
