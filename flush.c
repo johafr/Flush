@@ -11,6 +11,7 @@ char commands[][100] = {"help", "cd", "user"};
 
 int ownCommands(char** parsedArgs);
 int status;
+int isWait = 1;
 
 //method for "help".
 int showCommands() {
@@ -44,23 +45,13 @@ int printUser() {
 
 //method for "cd".
 int changeDirectory(char** parsedArgs) {
-  int state;
-  pid_t PID = fork();
   char* formatted;
-  //child fork
-  if (PID == 0) {
-    if (parsedArgs[1][0] == '/') {
-    formatted = parsedArgs[1] + 1;
+  if (parsedArgs[1][0] == '/') {
+  formatted = parsedArgs[1] + 1;
   } else {
-    formatted = parsedArgs[1];
+  formatted = parsedArgs[1];
   }
-  chdir(formatted);
-  printf("cd complete \n");
-  exit(0);
-  } else {
-    waitpid(-1, &state, 0);
-    return state;
-  }
+  return chdir(formatted);
 }
   
 
@@ -86,14 +77,27 @@ int takeInput(char* input) {
   }
 } 
 
-int processString(char* str, char** parsedArgs) {
+int processString(char* input, char** parsedArgs) {
+  char* containsAnd = strchr(input, '&');
+  if (containsAnd != NULL) {
+    isWait = 0;
+    input[strlen(input) - 1] = 0;
+  } else {
+    isWait = 1;
+  }
   for (int i = 0; i < 100; i++) {
-    parsedArgs[i] = strsep(&str, " ");
+    parsedArgs[i] = strsep(&input, " ");
     if (parsedArgs[i] == NULL) {
       break;
     }
     if (strlen(parsedArgs[i]) == 0) {
       i--;
+    }
+  }
+  //sjekker om args inneholder < eller >
+  for (int i = 0; i < sizeof(parsedArgs)/sizeof(parsedArgs[0]); i++) {
+    if ((parsedArgs[i] == "<") || (parsedArgs[i] == ">")) {
+      return 2;
     }
   }
   if (ownCommands(parsedArgs)) {
@@ -132,6 +136,7 @@ int ownCommands(char** parsedArgs) {
 
 int executeCommand(char** parsedArgs) {
   int state;
+  int len = sizeof(parsedArgs)/sizeof(parsedArgs[0]);
   pid_t PID = fork();
   if (PID == 0) {
     if (execvp(parsedArgs[0], parsedArgs) < 0) {
@@ -139,14 +144,14 @@ int executeCommand(char** parsedArgs) {
     }
     exit(0);
   } else {
-    waitpid(-1, &state, 0);
+    if (isWait) {
+      waitpid(-1, &state, 0);
+    }
     return state;
   }
 }
 
-
-
-
+//main
 int main() {
   char input[100], *parsedArgs[100];
   int execFlag = 0;
