@@ -12,6 +12,10 @@ char commands[][100] = {"help", "cd", "user"};
 int ownCommands(char** parsedArgs);
 int status;
 int isWait = 1;
+struct PIDs {
+  pid_t PID;
+  struct PIDs* next;
+};
 
 //method for "help".
 int showCommands() {
@@ -139,6 +143,7 @@ int executeCommand(char** parsedArgs) {
   int len = sizeof(parsedArgs)/sizeof(parsedArgs[0]);
   pid_t PID = fork();
   if (PID == 0) {
+    //må returnere execvp for å få state til å bli null med &
     if (execvp(parsedArgs[0], parsedArgs) < 0) {
       printf("Could not execute program. For information about available commands, type 'help'\n");
     }
@@ -146,6 +151,7 @@ int executeCommand(char** parsedArgs) {
   } else {
     if (isWait) {
       waitpid(-1, &state, 0);
+      printf("PID %d \n", getpid());
     }
     return state;
   }
