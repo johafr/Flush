@@ -34,7 +34,13 @@ void insertProcess(pid_t childPID, char command[1024]) {
   }
 }
 
-//need to implement completed process
+void processFin(pid_t childPID) {
+  for (int i = 0; i < numProcesses; i++) {
+    if (processes[i].PID == childPID) {
+      processes[i].fin = 1;
+    }
+  }
+}
 
 void removeProcess(pid_t childPID) {
   for (int i = 0; i < numProcesses; i++) {
@@ -196,22 +202,17 @@ int executeCommand(char** parsedArgs) {
   int len = sizeof(parsedArgs)/sizeof(parsedArgs[0]);
   pid_t PID = fork();
   if (PID == 0) {
-    //må returnere execvp for å få state til å bli null med &
     state = execvp(parsedArgs[0], parsedArgs);
     if (state < 0) {
       printf("Could not execute program. For information about available commands, type 'help'\n");
     }
-
-    // if (execvp(parsedArgs[0], parsedArgs) < 0) {
-    //   printf("Could not execute program. For information about available commands, type 'help'\n");
-    // }
     exit(0);
+
   } else {
     insertProcess(PID, *parsedArgs);
     if (isWait) {
-      waitpid(-1, &state, 0);
+      waitpid(PID, &state, 0);
       removeProcess(PID);
-      printf("PID %d \n", getpid());
     }
     return state;
   }
@@ -219,6 +220,7 @@ int executeCommand(char** parsedArgs) {
 
 void catchZombies() {
   pid_t zombiePID;
+  // mest sannsynlig noe galt med denne
   while (zombiePID = waitpid(-1, NULL, WNOHANG)) {
     printf("zombiePID: %i\n",zombiePID);
     if (zombiePID == 0) {
@@ -229,7 +231,7 @@ void catchZombies() {
       if (zombiePID == processes[i].PID) {
         if (processes[i].fin == 1) {
           removeProcess(zombiePID);
-          kill(processes[i].PID, SIGKILL);
+          //kill(processes[i].PID, SIGKILL);
         }
       }
     } 
@@ -245,6 +247,7 @@ int main() {
   int execFlag = 0;
 
   while (1) {
+    catchZombies();
     printCurrentDirectory();
     int inputValue = takeInput(input);
     isWait = 1;
@@ -257,10 +260,10 @@ int main() {
       execFlag = processString(input, parsedArgs);
       if (execFlag == 1) {
         status = executeCommand(parsedArgs);
+        printf("executeCmd: %i\n", status);
       }
       printf("Exit status [%s] = %i\n", parsedArgs[0], status);
     }
-    catchZombies();
   }
 
   printf("\nByeBye!\n");
