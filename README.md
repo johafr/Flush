@@ -2,7 +2,8 @@
 Flush shell implementation
 
 TODO: 
-- Bug med exit status, returnerer ikke alltid 0
 - implementere separering med tab
-
-- I/O redirection fungerer ikke, må nesten spørre noen hva det er...
+- Fikse return signal med execvp for "&"
+- implementere catch zombies i 3.4
+  - Må sette fin = 1 når en process er ferdig utført. Skal bruke WNOHANG mest sannsynlig.
+  - Mån få implementert kill() til å terminere child process ikke parent
