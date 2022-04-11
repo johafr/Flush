@@ -7,15 +7,44 @@
 #include<readline/readline.h>
 #include<readline/history.h>
 
-char commands[][100] = {"help", "cd", "user"};
+#define numProcesses 10
+
+char commands[][100] = {"help", "cd", "user", "jobs"};
 
 int ownCommands(char** parsedArgs);
 int status;
-int isWait = 1;
-struct PIDs {
+int isWait;
+
+struct process {
+  int fin;
+  char cmd[1024];
   pid_t PID;
-  struct PIDs* next;
 };
+
+struct process processes[numProcesses];
+
+void insertProcess(pid_t childPID, char command[1024]) {
+  for (int i = 0; i < numProcesses; i++) {
+    if (processes[i].PID == 0) {
+      processes[i].PID = childPID;
+      processes[i].fin = 0;
+      strcpy(processes[i].cmd, command);
+      break;
+    }
+  }
+}
+
+//need to implement completed process
+
+void removeProcess(pid_t childPID) {
+  for (int i = 0; i < numProcesses; i++) {
+    if (processes[i].PID == childPID) {
+      processes[i].PID = 0;
+      processes[i].fin = 0;
+      strcpy(processes[i].cmd, "");
+    }
+  }
+}
 
 //method for "help".
 int showCommands() {
@@ -29,7 +58,9 @@ int showCommands() {
     }
     exit(0);
   } else {
+    insertProcess(PID, "help");
     waitpid(-1, &state, 0);
+    //removeProcess(); kommentert vekk for å kunne sjekke om ting fungerer. Skal ikke være kommentert til innlevering
     return state;
   }
 }
@@ -42,7 +73,9 @@ int printUser() {
     printf("User: %s\n", getenv("USER"));
     exit(0);
   } else {
+    insertProcess(PID, "user");
     waitpid(-1, &state, 0);
+    removeProcess(PID);
     return state;
   }
 }
@@ -57,7 +90,24 @@ int changeDirectory(char** parsedArgs) {
   }
   return chdir(formatted);
 }
+
+//method for jobs
+int printJobs() {
+  int state;
+  pid_t PID = fork();
+  if (PID == 0) {
+    for (int i = 0; i < numProcesses; i++) {
+      if (processes[i].PID != 0) {
+        printf("PID: %i   cmd: %s\n", processes[i].PID, processes[i].cmd);
+      }
+    }
+    exit(0);
+  } else {
+    waitpid(-1, &state, 0);
+    return state;
+  }
   
+}
 
 void printCurrentDirectory() {
   char cwd[1024];
@@ -112,7 +162,7 @@ int processString(char* input, char** parsedArgs) {
 }
 
 int ownCommands(char** parsedArgs) {
-  int num = 3;
+  int num = 4;
   int argNum;
   
   for (int i = 0; i < num; i++) {
@@ -132,6 +182,9 @@ int ownCommands(char** parsedArgs) {
     case 2:
       status = printUser();
       return 1;
+    case 3:
+      status = printJobs();
+      return 1;
     default: 
       break;
   }
@@ -144,16 +197,45 @@ int executeCommand(char** parsedArgs) {
   pid_t PID = fork();
   if (PID == 0) {
     //må returnere execvp for å få state til å bli null med &
-    if (execvp(parsedArgs[0], parsedArgs) < 0) {
+    state = execvp(parsedArgs[0], parsedArgs);
+    if (state < 0) {
       printf("Could not execute program. For information about available commands, type 'help'\n");
     }
+
+    // if (execvp(parsedArgs[0], parsedArgs) < 0) {
+    //   printf("Could not execute program. For information about available commands, type 'help'\n");
+    // }
     exit(0);
   } else {
+    insertProcess(PID, *parsedArgs);
     if (isWait) {
       waitpid(-1, &state, 0);
+      removeProcess(PID);
       printf("PID %d \n", getpid());
     }
     return state;
+  }
+}
+
+void catchZombies() {
+  pid_t zombiePID;
+  while (zombiePID = waitpid(-1, NULL, WNOHANG)) {
+    printf("zombiePID: %i\n",zombiePID);
+    if (zombiePID == 0) {
+      return;
+    }
+    int index = -1;
+    for (int i = 0; i < numProcesses; i++) {
+      if (zombiePID == processes[i].PID) {
+        if (processes[i].fin == 1) {
+          removeProcess(zombiePID);
+          kill(processes[i].PID, SIGKILL);
+        }
+      }
+    } 
+    if (index == -1) {
+      return;
+    } 
   }
 }
 
@@ -165,6 +247,7 @@ int main() {
   while (1) {
     printCurrentDirectory();
     int inputValue = takeInput(input);
+    isWait = 1;
 
     if (inputValue == -1) {
       break;
@@ -177,6 +260,7 @@ int main() {
       }
       printf("Exit status [%s] = %i\n", parsedArgs[0], status);
     }
+    catchZombies();
   }
 
   printf("\nByeBye!\n");
