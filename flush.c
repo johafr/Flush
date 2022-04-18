@@ -16,7 +16,6 @@ int status;
 int isWait;
 
 struct process {
-  int fin;
   char cmd[1024];
   pid_t PID;
 };
@@ -27,17 +26,8 @@ void insertProcess(pid_t childPID, char command[1024]) {
   for (int i = 0; i < numProcesses; i++) {
     if (processes[i].PID == 0) {
       processes[i].PID = childPID;
-      processes[i].fin = 0;
       strcpy(processes[i].cmd, command);
       break;
-    }
-  }
-}
-
-void processFin(pid_t childPID) {
-  for (int i = 0; i < numProcesses; i++) {
-    if (processes[i].PID == childPID) {
-      processes[i].fin = 1;
     }
   }
 }
@@ -46,7 +36,6 @@ void removeProcess(pid_t childPID) {
   for (int i = 0; i < numProcesses; i++) {
     if (processes[i].PID == childPID) {
       processes[i].PID = 0;
-      processes[i].fin = 0;
       strcpy(processes[i].cmd, "");
     }
   }
@@ -66,7 +55,7 @@ int showCommands() {
   } else {
     insertProcess(PID, "help");
     waitpid(-1, &state, 0);
-    //removeProcess(); kommentert vekk for å kunne sjekke om ting fungerer. Skal ikke være kommentert til innlevering
+    removeProcess(PID);
     return state;
   }
 }
@@ -213,44 +202,42 @@ int executeCommand(char** parsedArgs) {
     if (isWait) {
       waitpid(PID, &state, 0);
       removeProcess(PID);
+    } else {
+      state = -1;
     }
     return state;
   }
 }
 
 void catchZombies() {
-  pid_t zombiePID;
-  // mest sannsynlig noe galt med denne
-  while (zombiePID = waitpid(-1, NULL, WNOHANG)) {
-    printf("zombiePID: %i\n",zombiePID);
-    if (zombiePID == 0) {
-      return;
+  int pidStatus;
+  pid_t zombiePID = waitpid(-1, &pidStatus, WNOHANG);
+  char zombieCmd[1024];
+  for (int i = 0; i < numProcesses; i++) {
+    if (processes[i].PID == zombiePID) {
+      strcpy(zombieCmd, processes[i].cmd);
     }
-    int index = -1;
-    for (int i = 0; i < numProcesses; i++) {
-      if (zombiePID == processes[i].PID) {
-        if (processes[i].fin == 1) {
-          removeProcess(zombiePID);
-          //kill(processes[i].PID, SIGKILL);
-        }
-      }
-    } 
-    if (index == -1) {
-      return;
-    } 
   }
+
+  if (zombiePID > 0) {
+    removeProcess(zombiePID);
+    if (WIFEXITED(pidStatus)) {
+      printf("Exit status background process [%s]: %d\n", zombieCmd, WEXITSTATUS(pidStatus));
+    }
+    catchZombies();
+  }
+
 }
 
 //main
 int main() {
   char input[100], *parsedArgs[100];
   int execFlag = 0;
-
+  printCurrentDirectory();
   while (1) {
-    catchZombies();
-    printCurrentDirectory();
     int inputValue = takeInput(input);
     isWait = 1;
+    catchZombies();
 
     if (inputValue == -1) {
       break;
@@ -260,10 +247,13 @@ int main() {
       execFlag = processString(input, parsedArgs);
       if (execFlag == 1) {
         status = executeCommand(parsedArgs);
-        printf("executeCmd: %i\n", status);
       }
-      printf("Exit status [%s] = %i\n", parsedArgs[0], status);
+      if (status != -1) {
+        printf("Exit status [%s] = %i\n", parsedArgs[0], status);
+      }
     }
+    catchZombies();
+    printCurrentDirectory();
   }
 
   printf("\nByeBye!\n");
