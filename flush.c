@@ -1,5 +1,11 @@
 #include<stdio.h>
 #include<string.h>
+//
+#include<time.h>
+#include<signal.h>
+#include<limits.h>
+#include<fcntl.h>
+//
 #include<stdlib.h>
 #include<unistd.h>
 #include<sys/types.h>
@@ -143,12 +149,6 @@ int processString(char* input, char** parsedArgs) {
       i--;
     }
   }
-  //sjekker om args inneholder < eller >
-  for (int i = 0; i < sizeof(parsedArgs)/sizeof(parsedArgs[0]); i++) {
-    if ((parsedArgs[i] == "<") || (parsedArgs[i] == ">")) {
-      return 2;
-    }
-  }
   if (ownCommands(parsedArgs)) {
     return 0;
   } else {
@@ -187,10 +187,47 @@ int ownCommands(char** parsedArgs) {
 }
 
 int executeCommand(char** parsedArgs) {
+  int fd_in = -1;
+  int fd_out = -1;
   int state;
-  int len = sizeof(parsedArgs)/sizeof(parsedArgs[0]);
+  int len = 0;
+  while(parsedArgs[len] != NULL) {
+    len +=1;
+  }
+  char *inputPath = NULL;
+  char *outputPath = NULL;
+  for (int i = 0; i < len; i++) {
+    char *inputTmp = NULL;
+    char *outputTmp = NULL;
+    if (!strcmp(parsedArgs[i], "<")) {
+      inputTmp = malloc(sizeof parsedArgs[i + 1]);
+      strcpy(inputTmp, parsedArgs[i + 1]);
+      inputPath = inputTmp;
+    }
+    if (!strcmp(parsedArgs[i], ">")) {
+      outputTmp = malloc(sizeof parsedArgs[i + 1]);
+      strcpy(outputTmp, parsedArgs[i + 1]);
+      outputPath = outputTmp;
+      parsedArgs[i] = NULL;
+    }
+  }
   pid_t PID = fork();
+  
   if (PID == 0) {
+    if (outputPath != NULL) {
+      if (fd_in == -1) {
+        fd_in = open(inputPath, O_RDONLY);
+      }
+      dup2(fd_in, STDIN_FILENO);
+      close(fd_in);
+    }
+
+    if (outputPath != NULL) {
+      fd_out = open(outputPath, O_CREAT|O_TRUNC|O_WRONLY);
+      dup2(fd_out, STDOUT_FILENO);
+      close(fd_out);
+    }
+
     state = execvp(parsedArgs[0], parsedArgs);
     if (state < 0) {
       printf("Could not execute program. For information about available commands, type 'help'\n");
@@ -231,11 +268,12 @@ void catchZombies() {
 
 //main
 int main() {
-  char input[100], *parsedArgs[100];
+  char input[100], *parsedArgs[100], unparsed[100];
   int execFlag = 0;
   printCurrentDirectory();
   while (1) {
     int inputValue = takeInput(input);
+    strcpy(unparsed, input);
     isWait = 1;
     catchZombies();
 
